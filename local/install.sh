@@ -164,7 +164,7 @@ get_json_field() {
 # line; with --json emits a single "models" event with the full list.
 list_available_models() {
   models_jsonl=$(curl -fsSL "$MODELS_UPDATE_URL" 2>/dev/null) || {
-    echo "ERROR: Could not fetch models list from $MODELS_UPDATE_URL"
+    printf '%sERROR: Could not fetch models list from %s%s\n' "$RED" "$MODELS_UPDATE_URL" "$RESET"
     emit_error "Could not fetch models list from $MODELS_UPDATE_URL"
     exit 1
   }
@@ -198,7 +198,7 @@ EOF
       esac
       id=$(printf '%s' "$entry" | get_json_field id)
       name=$(printf '%s' "$entry" | get_json_field displayName)
-      echo "$name ($id)"
+      printf '  %s%s%s (%s)\n' "$GRAY" "$name" "$RESET" "$id"
     done <<EOF
 $(printf '%s\n' "$models_jsonl")
 EOF
@@ -217,7 +217,7 @@ get_archive_field() {
 fetch_models_config() {
   # Fetch the JSONL metadata.
   models_jsonl=$(curl -fsSL "$MODELS_UPDATE_URL" 2>/dev/null) || {
-    echo "ERROR: Could not fetch models config from $MODELS_UPDATE_URL"
+    printf '%sERROR: Could not fetch models config from %s%s\n' "$RED" "$MODELS_UPDATE_URL" "$RESET"
     exit 1
   }
 
@@ -225,7 +225,7 @@ fetch_models_config() {
   model_entry=$(printf '%s\n' "$models_jsonl" | grep "\"platform\":\"${PLATFORM}\"" | grep "\"id\":\"${MODEL}\"" | tail -1)
   if [ -z "$model_entry" ]; then
     supported=$(printf '%s\n' "$models_jsonl" | grep "\"platform\":\"${PLATFORM}\"" | while IFS= read -r e; do printf '%s' "$e" | get_json_field id; done | tr '\n' ',' | sed 's/,$//')
-    echo "ERROR: Unknown model: $MODEL for platform $PLATFORM (supported: $supported)"
+    printf '%sERROR: Unknown model: %s for platform %s (supported: %s)%s\n' "$RED" "$MODEL" "$PLATFORM" "$supported" "$RESET"
     exit 1
   fi
 
@@ -235,7 +235,7 @@ fetch_models_config() {
   # Fetch the model JSON file.
   MODEL_CONFIG_URL="${UPDATE_FILES_BASE_URL}/models/${MODEL_FILE_ID}.json"
   models_json=$(curl -fsSL "$MODEL_CONFIG_URL" 2>/dev/null) || {
-    echo "ERROR: Could not fetch model config from $MODEL_CONFIG_URL"
+    printf '%sERROR: Could not fetch model config from %s%s\n' "$RED" "$MODEL_CONFIG_URL" "$RESET"
     exit 1
   }
 
@@ -243,7 +243,7 @@ fetch_models_config() {
   # listing models — no install is happening.
   if [ "$LIST_MODELS" != true ]; then
     MODEL_CONFIG_FILE="$BASE_DIR/models/${MODEL_FILE_ID}.json"
-    echo "  Saving model config to $MODEL_CONFIG_FILE..."
+    printf '  %sSaving model config to %s...%s\n' "$GRAY" "$MODEL_CONFIG_FILE" "$RESET"
     echo "$models_json" > "$MODEL_CONFIG_FILE"
   fi
 
@@ -267,12 +267,12 @@ ENGINE_UPDATE_URL="${UPDATE_FILES_BASE_URL}/update-info-engine-${CHANNEL}.jsonl"
 
 fetch_engine_config() {
   engine_jsonl=$(curl -fsSL "$ENGINE_UPDATE_URL" 2>/dev/null) || {
-    echo "ERROR: Could not fetch engine config from $ENGINE_UPDATE_URL"
+    printf '%sERROR: Could not fetch engine config from %s%s\n' "$RED" "$ENGINE_UPDATE_URL" "$RESET"
     exit 1
   }
   engine_entry=$(printf '%s\n' "$engine_jsonl" | grep "\"platform\":\"${PLATFORM}\"" | tail -1)
   if [ -z "$engine_entry" ]; then
-    echo "ERROR: No engine entry found for platform $PLATFORM in channel $CHANNEL"
+    printf '%sERROR: No engine entry found for platform %s in channel %s%s\n' "$RED" "$PLATFORM" "$CHANNEL" "$RESET"
     exit 1
   fi
 
@@ -986,7 +986,7 @@ install_engine() {
   if engine_installed; then
     printf '  %sEngine v%s is already unpacked. Skipping download.%s\n' "$GRAY" "$ENGINE_VERSION" "$RESET"
   else
-    echo "  Downloading $ENGINE_ARCHIVE..."
+    printf '  %sDownloading %s...%s\n' "$GRAY" "$ENGINE_ARCHIVE" "$RESET"
     download_with_retry "$ENGINE_URL" "$DOWNLOAD_DIR/$ENGINE_ARCHIVE" 3 "$ENGINE_LABEL"
     printf '  %sChecking SHA256...%s\n' "$GRAY" "$RESET"
 
@@ -994,8 +994,8 @@ install_engine() {
     actual_sha256=$(get_checksum "$DOWNLOAD_DIR/$ENGINE_ARCHIVE")
     if [ "$actual_sha256" != "$ENGINE_SHA256" ]; then
       printf '  %sERROR: SHA256 mismatch for %s%s\n' "$RED" "$ENGINE_ARCHIVE" "$RESET"
-      echo "    Expected: $ENGINE_SHA256"
-      echo "    Actual:   $actual_sha256"
+      printf '    %sExpected: %s%s\n' "$GRAY" "$ENGINE_SHA256" "$RESET"
+      printf '    %sActual:   %s%s\n' "$GRAY" "$actual_sha256" "$RESET"
       # A resumed download that ends up corrupt would keep failing this check
       # forever, so drop the file and let the next run fetch it again.
       rm -f "$DOWNLOAD_DIR/$ENGINE_ARCHIVE"
@@ -1005,7 +1005,7 @@ install_engine() {
     fi
     printf '  %sSHA256 verified%s %s%s%s\n' "$JUNIE_GREEN" "$RESET" "$GRAY_DIM" "$actual_sha256" "$RESET"
 
-    echo "  Unpacking to $ENGINE_DIR..."
+    printf '  %sUnpacking to %s...%s\n' "$GRAY" "$ENGINE_DIR" "$RESET"
     emit_activity "extracting" "$ENGINE_ARCHIVE" "$ENGINE_LABEL"
     # Remove leftovers from a previously interrupted unpack
     rm -rf "$ENGINE_DIR"
@@ -1015,20 +1015,19 @@ install_engine() {
     tar -xzf "$DOWNLOAD_DIR/$ENGINE_ARCHIVE" -C "$ENGINE_DIR" --strip-components=1
     touch "$(engine_completion_marker)"
     rm -f "$DOWNLOAD_DIR/$ENGINE_ARCHIVE"
-    echo "  Unpack complete."
+    printf '  %sUnpack complete.%s\n' "$JUNIE_GREEN" "$RESET"
   fi
 
   # A real directory at current would make ln fail — refuse rather than delete it
   if [ -d "$CURRENT_LINK" ] && [ ! -L "$CURRENT_LINK" ]; then
-    echo "  ERROR: $CURRENT_LINK is a directory, not a symlink."
-    echo "  Move it out of the way and re-run."
+    printf '  %sERROR: %s is a directory, not a symlink.%s\n' "$RED" "$CURRENT_LINK" "$RESET"
+    printf '  %sMove it out of the way and re-run.%s\n' "$GRAY" "$RESET"
     emit_error "$CURRENT_LINK is a directory, not a symlink"
     wait_and_exit 1
   fi
 
-  echo "  Pointing $CURRENT_LINK at $ENGINE_DIR..."
+  printf '  %sPointing %s at %s...%s\n' "$GRAY" "$CURRENT_LINK" "$ENGINE_DIR" "$RESET"
   ln -sfn "$ENGINE_DIR" "$CURRENT_LINK"
-  echo ""
 }
 
 # Ensure server-config.json exists with the api_key and port fields. The engine
@@ -1039,22 +1038,22 @@ handle_server_config() {
 
   # If the config already exists, leave it alone — the engine manages it.
   if [ -f "$SERVER_CONFIG" ]; then
-    echo "  Reusing existing server-config.json."
+    printf '  %sReusing existing server-config.json.%s\n' "$GRAY" "$RESET"
     return 0
   fi
 
   # First run: generate a token and create the config file.
   local token
   token="sk-$(generate_token)"
-  echo "  Auth token generated."
-  echo "  Writing server-config.json with api_key and port..."
+  printf '  %sAuth token generated.%s\n' "$GRAY" "$RESET"
+  printf '  %sWriting server-config.json with api_key and port...%s\n' "$GRAY" "$RESET"
   cat > "$SERVER_CONFIG" <<EOF
 {
   "api_key": "$token",
   "port": $ENGINE_PORT
 }
 EOF
-  echo "  server-config.json created with bearer auth and port."
+  printf '  %sserver-config.json created with bearer auth and port.%s\n' "$JUNIE_GREEN" "$RESET"
 }
 
 # Function to start the engine daemon using serverctl.sh. The daemon serves the
@@ -1065,15 +1064,15 @@ start_engine() {
   auth_token=$(get_json_field api_key < "$BASE_DIR/server-config.json")
 
   if [ ! -f "$ENGINE_CTL" ]; then
-    echo "  ERROR: serverctl.sh not found at $ENGINE_CTL"
-    echo "  Cannot start the engine without it."
+    printf '  %sERROR: serverctl.sh not found at %s%s\n' "$RED" "$ENGINE_CTL" "$RESET"
+    printf '  %sCannot start the engine without it.%s\n' "$GRAY" "$RESET"
     emit_error "serverctl.sh not found at $ENGINE_CTL"
     return 1
   fi
 
   # Stop an engine from an earlier run so it releases the port
   if is_engine_running; then
-    echo "  Stopping the running engine..."
+    printf '  %sStopping the running engine...%s\n' "$GRAY" "$RESET"
     "$ENGINE_CTL" stop >/dev/null 2>&1 || true
     waited=0
     while [ "$waited" -lt 10 ] && is_engine_running; do
@@ -1087,7 +1086,7 @@ start_engine() {
   # 3>&- keeps the spawned daemon from inheriting the machine-output event
   # stream: a consumer reading our stdout would otherwise never see
   # end-of-stream because the daemon holds the pipe open forever.
-  echo "  Starting the engine..."
+  printf '  %sStarting the engine...%s\n' "$GRAY" "$RESET"
   ( "$ENGINE_CTL" start > /dev/null 2>&1 3>&- )
 
   # Wait for the engine to become ready by polling /status until phase is "ready".
@@ -1096,7 +1095,7 @@ start_engine() {
     phase=$(curl -s -m 5 -H "Authorization: Bearer $auth_token" "http://localhost:$ENGINE_PORT/status" 2>/dev/null \
       | get_json_field phase || true)
     if [ "$phase" = "ready" ]; then
-      echo "  Engine is ready on port $ENGINE_PORT."
+      print_value "Engine:" "ready on port $ENGINE_PORT" true false ""
       return 0
     fi
     if [ "$phase" = "error" ]; then
@@ -1106,8 +1105,8 @@ start_engine() {
     waited=$((waited + 1))
   done
 
-  echo "  WARNING: the engine is not answering on port $ENGINE_PORT yet."
-  echo "  Check the engine logs in $BASE_DIR"
+  printf '  %sWARNING: the engine is not answering on port %s yet.%s\n' "$YELLOW" "$ENGINE_PORT" "$RESET"
+  printf '  %sCheck the engine logs in %s%s\n' "$GRAY" "$BASE_DIR" "$RESET"
   emit_warning "engine did not start listening on port $ENGINE_PORT — see logs in $BASE_DIR"
   return 1
 }
@@ -1119,7 +1118,7 @@ download_and_verify() {
   expected_sha256="$3"
   archive_label="$4"
 
-  echo "  Downloading $archive..."
+  printf '  %sDownloading %s...%s\n' "$GRAY" "$archive" "$RESET"
   download_with_retry "$download_url" "$DOWNLOAD_DIR/$archive" 3 "$archive_label"
   printf '  %sChecking SHA256...%s\n' "$GRAY" "$RESET"
 
@@ -1127,8 +1126,8 @@ download_and_verify() {
   actual=$(get_checksum "$DOWNLOAD_DIR/$archive")
   if [ "$actual" != "$expected_sha256" ]; then
     printf '  %sERROR: SHA256 mismatch for %s%s\n' "$RED" "$archive" "$RESET"
-    echo "    Expected: $expected_sha256"
-    echo "    Actual:   $actual"
+    printf '    %sExpected: %s%s\n' "$GRAY" "$expected_sha256" "$RESET"
+    printf '    %sActual:   %s%s\n' "$GRAY" "$actual" "$RESET"
     # Keeping a corrupt archive would make every later run resume into the same
     # mismatch, so it is dropped and re-downloaded from scratch next time.
     rm -f "$DOWNLOAD_DIR/$archive"
@@ -1170,7 +1169,7 @@ install_model_if_needed() {
 
   printf '  %sModel %s is not installed. Proceeding...%s\n\n' "$GRAY" "$model_label" "$RESET"
   download_and_verify "$download_url" "$zip_file" "$sha256_sum" "$model_label"
-  echo "  Extracting $zip_file..."
+  printf '  %sExtracting %s...%s\n' "$GRAY" "$zip_file" "$RESET"
   emit_activity "extracting" "$zip_file" "$model_label"
   # Remove leftovers from a previously interrupted extraction — the path is
   # spelled out instead of using $MODELS_DIR so the rm -rf target is explicit
@@ -1425,22 +1424,22 @@ if [ -x "$ENGINE_CTL" ]; then
   config_output="$("$ENGINE_CTL" --junie-config "$JUNIE_HOME" --model "$MODEL" 2>&1)"
   config_ok=$?
   if [ "$config_ok" -eq 0 ] && [ -f "$JUNIE_CONFIG_FILE" ]; then
-    echo "  Junie model config created at $JUNIE_CONFIG_FILE."
-    echo "  Default model set to $JUNIE_MODEL_ID."
+    print_value "Junie model config:" "$JUNIE_CONFIG_FILE" true false ""
+    print_value "Default model:" "$JUNIE_MODEL_ID" true false ""
   else
     if [ -n "$config_output" ]; then
       printf '%s\n' "$config_output"
     fi
     if [ "$config_ok" -ne 0 ]; then
-      echo "  WARNING: Junie config generation failed (exit code $config_ok)."
+      printf '  %sWARNING: Junie config generation failed (exit code %s).%s\n' "$YELLOW" "$config_ok" "$RESET"
     else
-      echo "  WARNING: Junie config file was not created at $JUNIE_CONFIG_FILE."
+      printf '  %sWARNING: Junie config file was not created at %s.%s\n' "$YELLOW" "$JUNIE_CONFIG_FILE" "$RESET"
     fi
     emit_warning "Junie config generation failed"
   fi
 else
-  echo "  WARNING: serverctl.sh not found at $ENGINE_CTL"
-  echo "  Skipping Junie config generation."
+  printf '  %sWARNING: serverctl.sh not found at %s%s\n' "$YELLOW" "$ENGINE_CTL" "$RESET"
+  printf '  %sSkipping Junie config generation.%s\n' "$GRAY" "$RESET"
 fi
 emit_step_done "configure"
 
