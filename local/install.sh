@@ -1417,11 +1417,27 @@ section "Configuring Junie"
 emit_step_start "configure" "Configuring Junie"
 # Ensure server-config.json exists so the engine can read the auth token.
 handle_server_config
-# Generate the Junie model config from the installed model template.
-# This resolves the $ENGINE_PORT and $AUTH_TOKEN placeholders and writes
-# the finished config to $JUNIE_HOME/models/<id>.json.
+# Generate the Junie model config from the installed model template via
+# serverctl.sh. Capture its output so we can show clean, consistent progress
+# messages instead of the engine's raw chatter, while still surfacing errors.
 if [ -x "$ENGINE_CTL" ]; then
-  "$ENGINE_CTL" --junie-config "$JUNIE_HOME" --model "$MODEL"
+  JUNIE_CONFIG_FILE="$JUNIE_HOME/models/${JUNIE_MODEL_ID}.json"
+  config_output="$("$ENGINE_CTL" --junie-config "$JUNIE_HOME" --model "$MODEL" 2>&1)"
+  config_ok=$?
+  if [ "$config_ok" -eq 0 ] && [ -f "$JUNIE_CONFIG_FILE" ]; then
+    echo "  Junie model config created at $JUNIE_CONFIG_FILE."
+    echo "  Default model set to $JUNIE_MODEL_ID."
+  else
+    if [ -n "$config_output" ]; then
+      printf '%s\n' "$config_output"
+    fi
+    if [ "$config_ok" -ne 0 ]; then
+      echo "  WARNING: Junie config generation failed (exit code $config_ok)."
+    else
+      echo "  WARNING: Junie config file was not created at $JUNIE_CONFIG_FILE."
+    fi
+    emit_warning "Junie config generation failed"
+  fi
 else
   echo "  WARNING: serverctl.sh not found at $ENGINE_CTL"
   echo "  Skipping Junie config generation."
