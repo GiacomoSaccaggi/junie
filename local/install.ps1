@@ -127,7 +127,7 @@ $Script:UpdateFilesBaseUrl =
         $env:JUNIE_LOCAL_UPDATE_FILES_BASE_URL
     }
     else {
-        "https://raw.githubusercontent.com/jetbrains-junie/junie/main/local"
+        "https://raw.githubusercontent.com/jetbrains-junie/junie/erokhins/local_main_staging/local"
     }
 
 # Platform identifier (matches install.sh convention)
