@@ -14,6 +14,8 @@ if uname -s | grep -qi "darwin"; then
   OS_TYPE="macos"
 else
   OS_TYPE="linux"
+  echo "ERROR: linux is not supported yet"
+  exit 1
 fi
 
 require_commands() {
