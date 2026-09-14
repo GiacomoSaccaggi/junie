@@ -1,5 +1,7 @@
 {
   "id": "local-qwen3.6-27b-4bit",
+  "draft_model": "Qwen3.6-27B-MTP-MLX-4bit",
+  "draft_kind": "mtp",
   "junieConfig": {
     "displayName": "Qwen 3.6",
     "providerName": "Local",

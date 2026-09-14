@@ -78,7 +78,7 @@ Fields:
 Individual JSON files in the `models/` folder provide full configuration and download information for each model:
 
 - `models/Qwen3.6-27B-MLX-4bit.json`
-- `models/Qwen3.8-27B-MLX-4bit.json`
+- `models/Qwen3.8-27B-test-MLX-4bit.json`
 
 ```json
 {
