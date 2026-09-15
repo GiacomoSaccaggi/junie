@@ -20,9 +20,9 @@
       "modelId": "Qwen3.6-27B-Q4_K_M",
       "label": "Qwen 3.6 27B Q4_K_M",
       "name": "Qwen3.6-27B-Q4_K_M.gguf",
-      "downloadUrl": "https://huggingface.co/unsloth/Qwen3.6-27B-MTP-GGUF/resolve/main/Qwen3.6-27B-Q4_K_M.gguf",
-      "sha256": "a7cbd3ecc0e3f9b333edee61ae66bc87ed713c5d49587a8355814722ed329e0f",
-      "size": 17106773120
+      "downloadUrl": "https://download.jetbrains.com/resources/junie-local/Qwen3.6-27B-Q4_K_M.gguf",
+      "sha256": "1d8c08021c512f85bdfdff4864c766d1170157326ee50c8f1103d87d47b02ffd",
+      "size": 16810713536
     }
   ]
 }
