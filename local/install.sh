@@ -255,8 +255,6 @@ fetch_models_config() {
   ARCHIVE_COUNT=$(printf '%s' "$models_json" | grep -o '"modelId"' | wc -l | tr -d ' ')
 }
 
-fetch_models_config
-
 # ============================================================
 # Engine configuration: fetched from update-info-engine-<channel>.jsonl
 # ============================================================
@@ -265,6 +263,10 @@ fetch_models_config
 # line). Fetch the file for the requested channel and pick the entry that
 # matches our platform.
 ENGINE_UPDATE_URL="${UPDATE_FILES_BASE_URL}/update-info-engine-${CHANNEL}.jsonl"
+
+# Filled in by fetch_engine_config. Empty until the metadata is resolved, which
+# only happens on the install path.
+ENGINE_VERSION=""
 
 fetch_engine_config() {
   engine_jsonl=$(curl -fsSL "$ENGINE_UPDATE_URL" 2>/dev/null) || {
@@ -282,18 +284,28 @@ fetch_engine_config() {
   ENGINE_SHA256=$(printf '%s' "$engine_entry" | get_json_field sha256)
 }
 
-fetch_engine_config
-
-# Archive name is the last path segment of the download URL.
-ENGINE_ARCHIVE=$(printf '%s' "$ENGINE_URL" | sed 's|.*/||')
-
 # Inference engine release. Versions are unpacked side by side under versions/
 # and the current symlink points at the one to run.
 ENGINE_LABEL="inference engine"
 VERSIONS_DIR="$BASE_DIR/versions"
-ENGINE_DIR="$VERSIONS_DIR/$ENGINE_VERSION"
 CURRENT_LINK="$BASE_DIR/current"
 ENGINE_CTL="$CURRENT_LINK/serverctl.sh"
+
+# Paths that cannot be known before the engine metadata is fetched.
+resolve_engine_paths() {
+  # Archive name is the last path segment of the download URL.
+  ENGINE_ARCHIVE=$(printf '%s' "$ENGINE_URL" | sed 's|.*/||')
+  ENGINE_DIR="$VERSIONS_DIR/$ENGINE_VERSION"
+}
+
+# Everything the install needs from the network and the only pre-install write
+# to disk. It is a function and not top-level code on purpose: --check-only
+# exits before it is ever called, so a check stays offline and side-effect free.
+resolve_install_metadata() {
+  fetch_models_config
+  fetch_engine_config
+  resolve_engine_paths
+}
 
 # The port the engine serves on (the Junie model config below points at it) and
 # the RAM allowance it may spend on weights and KV cache. The engine reads the
@@ -1350,6 +1362,14 @@ elif [ "$MEM_GB" -lt 60 ]; then
 fi
 print_value "RAM:" "${MEM_GB} GB" "$RAM_OK" "$RAM_WARN" "minimum 40 GB, 60 GB recommended"
 emit_check "ram" "$(check_status "$RAM_OK" "$RAM_WARN")" "${MEM_GB} GB" "minimum 40 GB, 60 GB recommended"
+
+# Resolve the install metadata (model and engine configs) now that the checks
+# are done. This is the first thing in the script that touches the network or
+# writes to disk, and --check-only exits right below without needing any of it,
+# so a check never pays for it — it reports an empty engine version instead.
+if [ "$CHECK_ONLY" != true ]; then
+  resolve_install_metadata
+fi
 
 # The install configuration is not shown; it still travels as an event so a
 # machine consumer sees the port, the RAM allowance and the engine version.

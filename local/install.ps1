@@ -358,15 +358,26 @@ $Script:EngineLabel = "inference engine"
 $Script:VersionsDir = Join-Path $Script:BaseDir "versions"
 $Script:CurrentFile = Join-Path $Script:BaseDir "current"
 
-# Fetch configs
-Fetch-ModelsConfig
-Fetch-EngineConfig
+# Filled in by Fetch-EngineConfig. Empty until the metadata is resolved, which
+# only happens on the install path.
+$Script:EngineVersion = ""
 
-# Archive name is the last path segment of the download URL.
-$Script:EngineArchive = $Script:EngineUrl.Split("/")[-1]
+# Paths that cannot be known before the engine metadata is fetched.
+function Resolve-EnginePaths {
+    # Archive name is the last path segment of the download URL.
+    $Script:EngineArchive = $Script:EngineUrl.Split("/")[-1]
+    $Script:EngineDir = Join-Path $Script:VersionsDir $Script:EngineVersion
+    $Script:EngineCtl = Join-Path $Script:EngineDir "serverctl.ps1"
+}
 
-$Script:EngineDir = Join-Path $Script:VersionsDir $Script:EngineVersion
-$Script:EngineCtl = Join-Path $Script:EngineDir "serverctl.ps1"
+# Everything the install needs from the network and the only pre-install write
+# to disk. It is a function and not top-level code on purpose: --check-only
+# exits before it is ever called, so a check stays offline and side-effect free.
+function Resolve-InstallMetadata {
+    Fetch-ModelsConfig
+    Fetch-EngineConfig
+    Resolve-EnginePaths
+}
 
 # ============================================================
 # List models mode
@@ -1265,6 +1276,14 @@ Emit-Check "vc_redist" (Check-Status $Script:VcRedistOk $false) "$Script:VcRedis
 
 Print-Value "RAM:" "$($Script:MemGb) GB" $ramOk $ramWarn "minimum 40 GB, 60 GB recommended"
 Emit-Check "ram" (Check-Status $ramOk $ramWarn) "$($Script:MemGb) GB" "minimum 40 GB, 60 GB recommended"
+
+# Resolve the install metadata (model and engine configs) now that the checks
+# are done. This is the first thing in the script that touches the network or
+# writes to disk, and --check-only exits right below without needing any of it,
+# so a check never pays for it - it reports an empty engine version instead.
+if (-not $CheckOnly) {
+    Resolve-InstallMetadata
+}
 
 # Config event
 Emit-Event "`"event`":`"config`",`"port`":$Script:EnginePort,`"ram_gb`":$Script:EngineRamGb,`"engine_version`":`"$(Json-Escape $Script:EngineVersion)`",`"model`":`"$(Json-Escape $Model)`",`"checks_passed`":$($Script:AllOk.ToString().ToLowerInvariant())"
