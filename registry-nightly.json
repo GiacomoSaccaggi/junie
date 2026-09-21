@@ -197,7 +197,7 @@
     {
       "id": "codebuddy-code",
       "name": "Codebuddy Code",
-      "version": "2.155.0",
+      "version": "2.156.0",
       "description": "Tencent Cloud's official intelligent coding tool",
       "website": "https://www.codebuddy.cn/cli/",
       "authors": [
@@ -207,7 +207,7 @@
       "license_url": "https://www.codebuddy.cn/agreement/",
       "distribution": {
         "npx": {
-          "package": "@tencent-ai/codebuddy-code@2.155.0",
+          "package": "@tencent-ai/codebuddy-code@2.156.0",
           "args": [
             "--acp"
           ]
@@ -390,7 +390,7 @@
     {
       "id": "cursor",
       "name": "Cursor",
-      "version": "2026.09.15",
+      "version": "2026.09.18",
       "description": "Cursor's coding agent",
       "website": "https://cursor.com/docs/cli/acp",
       "authors": [
@@ -401,42 +401,42 @@
       "distribution": {
         "binary": {
           "darwin-aarch64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/darwin/arm64/agent-cli-package.tar.gz",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/darwin/arm64/agent-cli-package.tar.gz",
             "cmd": "./dist-package/cursor-agent",
             "args": [
               "acp"
             ]
           },
           "darwin-x86_64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/darwin/x64/agent-cli-package.tar.gz",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/darwin/x64/agent-cli-package.tar.gz",
             "cmd": "./dist-package/cursor-agent",
             "args": [
               "acp"
             ]
           },
           "linux-aarch64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/linux/arm64/agent-cli-package.tar.gz",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/linux/arm64/agent-cli-package.tar.gz",
             "cmd": "./dist-package/cursor-agent",
             "args": [
               "acp"
             ]
           },
           "linux-x86_64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/linux/x64/agent-cli-package.tar.gz",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/linux/x64/agent-cli-package.tar.gz",
             "cmd": "./dist-package/cursor-agent",
             "args": [
               "acp"
             ]
           },
           "windows-aarch64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/windows/arm64/agent-cli-package.zip",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/windows/arm64/agent-cli-package.zip",
             "cmd": "./dist-package\\cursor-agent.cmd",
             "args": [
               "acp"
             ]
           },
           "windows-x86_64": {
-            "archive": "https://downloads.cursor.com/lab/2026.09.15-d2fe57e/windows/x64/agent-cli-package.zip",
+            "archive": "https://downloads.cursor.com/lab/2026.09.18-9a7762b/windows/x64/agent-cli-package.zip",
             "cmd": "./dist-package\\cursor-agent.cmd",
             "args": [
               "acp"
@@ -529,7 +529,7 @@
     {
       "id": "dimcode",
       "name": "DimCode",
-      "version": "0.5.6",
+      "version": "0.5.7",
       "description": "A coding agent that puts leading models at your command.",
       "website": "https://dimcode.dev/docs/acp.html",
       "authors": [
@@ -538,7 +538,7 @@
       "license": "proprietary",
       "distribution": {
         "npx": {
-          "package": "dimcode@0.5.6",
+          "package": "dimcode@0.5.7",
           "args": [
             "acp"
           ]
@@ -667,7 +667,7 @@
     {
       "id": "glm-acp-agent",
       "name": "GLM Agent",
-      "version": "1.11.0",
+      "version": "1.12.0",
       "description": "ACP agent powered by Zhipu AI's GLM Coding Plan models (glm-5.1, glm-5-turbo, glm-4.7, glm-4.5-air). Supports streaming, tool calls, mid-session model switching, image input via Z.AI Coding Plan Vision MCP, and session load/fork/resume with on-disk persistence.",
       "repository": "https://github.com/stefandevo/glm-acp-agent",
       "authors": [
@@ -678,7 +678,7 @@
       "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/glm-acp-agent.svg",
       "distribution": {
         "npx": {
-          "package": "glm-acp-agent@1.11.0"
+          "package": "glm-acp-agent@1.12.0"
         }
       }
     },
@@ -743,7 +743,7 @@
     {
       "id": "grok-build",
       "name": "Grok Build",
-      "version": "1.0.38",
+      "version": "1.0.40",
       "description": "xAI's coding agent and CLI",
       "website": "https://x.ai/cli",
       "authors": [
@@ -753,7 +753,7 @@
       "license_url": "https://x.ai/legal/terms-of-service",
       "distribution": {
         "npx": {
-          "package": "@xai-official/grok@1.0.38",
+          "package": "@xai-official/grok@1.0.40",
           "args": [
             "agent",
             "stdio"
@@ -765,7 +765,7 @@
     {
       "id": "harn",
       "name": "Harn",
-      "version": "0.10.138",
+      "version": "0.10.140",
       "description": "Harn runs .harn agent pipelines as a native ACP coding agent over stdio.",
       "repository": "https://github.com/burin-labs/harn",
       "website": "https://harnlang.com",
@@ -777,49 +777,49 @@
       "distribution": {
         "binary": {
           "darwin-aarch64": {
-            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.138/harn-aarch64-apple-darwin.tar.gz",
+            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.140/harn-aarch64-apple-darwin.tar.gz",
             "cmd": "./harn",
             "args": [
               "serve",
               "acp"
             ],
-            "sha256": "ce17de24ed2b419b2d8dcc6a819c72a93d612fec8ed3e0dbf224ab44667e99fa"
+            "sha256": "8660cd529754d644da5d85a0947220b1cd12469fc19705836f969e7b59b24c1b"
           },
           "darwin-x86_64": {
-            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.138/harn-x86_64-apple-darwin.tar.gz",
+            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.140/harn-x86_64-apple-darwin.tar.gz",
             "cmd": "./harn",
             "args": [
               "serve",
               "acp"
             ],
-            "sha256": "18d7c8e5a00603cb22ce594a515a0e33cdf6e301470338bb2b5bd507eb628e3d"
+            "sha256": "e32d0f8dd86bedd33ecd00d847d68637d7adcc7cbd4f3194feb4c4edc4b63453"
           },
           "linux-aarch64": {
-            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.138/harn-aarch64-unknown-linux-gnu.tar.gz",
+            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.140/harn-aarch64-unknown-linux-gnu.tar.gz",
             "cmd": "./harn",
             "args": [
               "serve",
               "acp"
             ],
-            "sha256": "0bc44874def758abef9c83e3d4c9670901162e477d1273b6e0f4ecec79bf2243"
+            "sha256": "2e17192c7c18422f05089e7249f228403e5bfb2940d5e0a16b48ee67cce198a2"
           },
           "linux-x86_64": {
-            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.138/harn-x86_64-unknown-linux-gnu.tar.gz",
+            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.140/harn-x86_64-unknown-linux-gnu.tar.gz",
             "cmd": "./harn",
             "args": [
               "serve",
               "acp"
             ],
-            "sha256": "52dc8a14429ae8f43c70eb21cafd8a4e8ee54aa3627262218f44e2f2234d04e4"
+            "sha256": "328930dfe144f65a8ca20484894c70129179e8849a49c10e3631690d6a60797f"
           },
           "windows-x86_64": {
-            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.138/harn-x86_64-pc-windows-msvc.zip",
+            "archive": "https://github.com/burin-labs/harn/releases/download/v0.10.140/harn-x86_64-pc-windows-msvc.zip",
             "cmd": "harn.exe",
             "args": [
               "serve",
               "acp"
             ],
-            "sha256": "288b51f986b5f92ef7ad8020de4f6711de521366331038553bd4a3d4b692ae5b"
+            "sha256": "e8527cde4b8b2ac8a1de1f7eff6e31d2afe283676af7386a0544b9d799f0576a"
           }
         }
       },
@@ -828,7 +828,7 @@
     {
       "id": "junie",
       "name": "Junie",
-      "version": "3405.1",
+      "version": "3407.1",
       "description": "AI Coding Agent by JetBrains",
       "repository": "https://github.com/JetBrains/junie-acp-release",
       "website": "https://junie.jetbrains.com",
@@ -840,42 +840,42 @@
       "distribution": {
         "binary": {
           "darwin-aarch64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-macos-aarch64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-macos-aarch64.zip",
             "cmd": "./Applications/junie.app/Contents/MacOS/junie",
             "args": [
               "--acp=true"
             ]
           },
           "darwin-x86_64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-macos-amd64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-macos-amd64.zip",
             "cmd": "./Applications/junie.app/Contents/MacOS/junie",
             "args": [
               "--acp=true"
             ]
           },
           "linux-aarch64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-linux-aarch64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-linux-aarch64.zip",
             "cmd": "./junie-app/bin/junie",
             "args": [
               "--acp=true"
             ]
           },
           "linux-x86_64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-linux-amd64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-linux-amd64.zip",
             "cmd": "./junie-app/bin/junie",
             "args": [
               "--acp=true"
             ]
           },
           "windows-x86_64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-windows-amd64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-windows-amd64.zip",
             "cmd": "./junie/junie.exe",
             "args": [
               "--acp=true"
             ]
           },
           "windows-aarch64": {
-            "archive": "https://github.com/JetBrains/junie/releases/download/3405.1/junie-nightly-3405.1-windows-aarch64.zip",
+            "archive": "https://github.com/JetBrains/junie/releases/download/3407.1/junie-nightly-3407.1-windows-aarch64.zip",
             "cmd": "./junie/junie.exe",
             "args": [
               "--acp=true"
@@ -1158,7 +1158,7 @@
     {
       "id": "nova",
       "name": "Nova",
-      "version": "1.1.45",
+      "version": "1.1.46",
       "description": "Nova by Compass AI - a fully-fledged software engineer at your command",
       "repository": "https://github.com/Compass-Agentic-Platform/nova",
       "website": "https://www.compassap.ai/portfolio/nova.html",
@@ -1170,7 +1170,7 @@
       "icon": "https://cdn.agentclientprotocol.com/registry/v1/latest/nova.svg",
       "distribution": {
         "npx": {
-          "package": "@compass-ai/nova@1.1.45",
+          "package": "@compass-ai/nova@1.1.46",
           "args": [
             "acp"
           ]
@@ -1351,7 +1351,7 @@
     {
       "id": "qwen-code",
       "name": "Qwen Code",
-      "version": "0.24.1",
+      "version": "0.24.2",
       "description": "Alibaba's Qwen coding assistant",
       "repository": "https://github.com/QwenLM/qwen-code",
       "website": "https://qwenlm.github.io/qwen-code-docs/en/users/overview",
@@ -1362,7 +1362,7 @@
       "license_url": "https://github.com/QwenLM/qwen-code/blob/main/LICENSE",
       "distribution": {
         "npx": {
-          "package": "@qwen-code/qwen-code@0.24.1",
+          "package": "@qwen-code/qwen-code@0.24.2",
           "args": [
             "--acp",
             "--experimental-skills"
