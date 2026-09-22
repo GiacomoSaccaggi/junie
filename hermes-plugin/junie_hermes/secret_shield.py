@@ -93,13 +93,11 @@ class SecretRedactor:
 
     Detection strategies (in scan order):
     1. Known provider API key prefixes (16 providers)
-    2. Key=value assignments (``password=``, ``token:``, ``secret=``)
-    3. Natural language (``the password is X``)
-    4. JSON sensitive fields (``"password": "value"``)
-    5. HTTP headers (``Authorization:``, ``Cookie:``, ``X-Api-Key:``)
-    6. Auth schemes (``Bearer``, ``Basic``, ``OAuth``)
-    7. Connection string URIs (``postgres://user:pass@host``)
-    8. JWT-shaped tokens (heuristic: base64-decoded header contains ``alg`` or ``enc``)
+    2. JSON sensitive fields (``"password": "value"``)
+    3. HTTP headers (``Authorization:``, ``Cookie:``, ``X-Api-Key:``)
+    4. Auth schemes (``Bearer``, ``Basic``, ``OAuth``)
+    5. Connection string URIs (``postgres://user:pass@host``)
+    6. JWT-shaped tokens (heuristic: base64-decoded header contains ``alg`` or ``enc``)
 
     Deferred to follow-up (to keep this change small and reviewable):
     YAML block scalars, XML elements, INI sections, PEM/SSH private key blocks,
@@ -132,18 +130,6 @@ class SecretRedactor:
 
     # -- Contextual patterns -----------------------------------------------
 
-    _ASSIGN = re.compile(
-        r"(?i)(?P<key>password|passwd|pwd|passphrase|secret|token|credential|"
-        r"api_key|apikey|auth|private_key|access_key|secret_key|client_secret|"
-        r"connection_string|database_url|refresh_token|access_token)"
-        r"\s*[:=]\s*"
-        r'(?P<value>"[^"]*"|\'[^\']*\'|\S+)'
-    )
-    _NATURAL = re.compile(
-        r"(?i)(?P<key>password|passwd|pwd|secret|token)\s+"
-        r"(?:is|equals|è|est)\s+"
-        r'(?P<value>"[^"]*"|\'[^\']*\'|\S+)'
-    )
     _JSON_SENSITIVE = re.compile(
         r'"(?P<key>password|passwd|pwd|secret|token|api_key|apikey|'
         r'client_secret|access_token|refresh_token|private_key|authorization)"'
@@ -183,18 +169,7 @@ class SecretRedactor:
                 return REDACTED
             result = pattern.sub(_replace, result)
 
-        # 2–3. Key=value assignments and natural language.
-        for pattern in (self._ASSIGN, self._NATURAL):
-            def _replace_kv(m: re.Match[str]) -> str:
-                nonlocal count
-                value = m.group("value")
-                if not value or value == REDACTED:
-                    return m.group(0)
-                count += 1
-                return m.group(0)[:m.start("value") - m.start()] + REDACTED + m.group(0)[m.end("value") - m.start():]
-            result = pattern.sub(_replace_kv, result)
-
-        # 4. JSON sensitive fields.
+        # 2. JSON sensitive fields.
         def _replace_json(m: re.Match[str]) -> str:
             nonlocal count
             value = m.group("value")
@@ -204,7 +179,7 @@ class SecretRedactor:
             return m.group(0)[:m.start("value") - m.start()] + f'"{REDACTED}"' + m.group(0)[m.end("value") - m.start():]
         result = self._JSON_SENSITIVE.sub(_replace_json, result)
 
-        # 5–6. Headers and auth schemes.
+        # 3–4. Headers and auth schemes.
         for pattern in (self._HEADER, self._AUTH):
             def _replace_header(m: re.Match[str]) -> str:
                 nonlocal count
@@ -215,7 +190,7 @@ class SecretRedactor:
                 return m.group(0)[:m.start("value") - m.start()] + REDACTED + m.group(0)[m.end("value") - m.start():]
             result = pattern.sub(_replace_header, result)
 
-        # 7. Connection string URIs.
+        # 5. Connection string URIs.
         def _replace_uri(m: re.Match[str]) -> str:
             nonlocal count
             userinfo = m.group("userinfo")
@@ -225,7 +200,7 @@ class SecretRedactor:
             return m.group(0)[:m.start("userinfo") - m.start()] + REDACTED + m.group(0)[m.end("userinfo") - m.start():]
         result = self._URI.sub(_replace_uri, result)
 
-        # 8. JWT-shaped tokens (heuristic format recognition, not signature verification).
+        # 6. JWT-shaped tokens (heuristic format recognition, not signature verification).
         def _replace_jwt(m: re.Match[str]) -> str:
             nonlocal count
             token = m.group("token")

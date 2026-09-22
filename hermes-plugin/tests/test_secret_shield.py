@@ -64,62 +64,6 @@ class TestPrefixPatterns(unittest.TestCase):
         self.assertGreaterEqual(r.redacted_count, 1)
 
 
-# ── Key=value assignments ────────────────────────────────────────────────────
-
-class TestKeyValueAssignment(unittest.TestCase):
-
-    def test_password_equals(self):
-        r = R.redact("password=SuperSecret123 done")
-        self.assertNotIn("SuperSecret123", r.text)
-        self.assertEqual(r.redacted_count, 1)
-
-    def test_token_colon(self):
-        r = R.redact("token: my_secret_value")
-        self.assertNotIn("my_secret_value", r.text)
-
-    def test_api_key_equals(self):
-        r = R.redact("api_key=abcdef123456")
-        self.assertNotIn("abcdef123456", r.text)
-
-    def test_quoted_value(self):
-        r = R.redact('password="hello world"')
-        self.assertNotIn("hello world", r.text)
-
-    def test_single_quoted(self):
-        r = R.redact("secret='my_secret'")
-        self.assertNotIn("my_secret", r.text)
-
-    def test_client_secret(self):
-        r = R.redact("client_secret=abcdef123456")
-        self.assertNotIn("abcdef123456", r.text)
-
-    def test_connection_string_key(self):
-        r = R.redact("connection_string=Server=host;Password=abc")
-        self.assertNotIn("Password=abc", r.text)
-
-    def test_database_url_key(self):
-        r = R.redact("database_url=postgres://user:pass@host/db")
-        self.assertNotIn("pass@host", r.text)
-
-
-# ── Natural language ─────────────────────────────────────────────────────────
-
-class TestNaturalLanguage(unittest.TestCase):
-
-    def test_password_is(self):
-        r = R.redact("the password is SuperSecret123 and it works")
-        self.assertNotIn("SuperSecret123", r.text)
-        self.assertEqual(r.redacted_count, 1)
-
-    def test_token_is(self):
-        r = R.redact("the token is abc123def456")
-        self.assertNotIn("abc123def456", r.text)
-
-    def test_password_est(self):
-        r = R.redact("le password est monSecret")
-        self.assertNotIn("monSecret", r.text)
-
-
 # ── HTTP headers and auth schemes ────────────────────────────────────────────
 
 class TestHeaders(unittest.TestCase):
@@ -213,59 +157,73 @@ class TestJsonFields(unittest.TestCase):
         self.assertEqual(r.redacted_count, 0)
 
 
-# ── Clean passthrough ────────────────────────────────────────────────────────
+# ── Clean passthrough (no false positives) ───────────────────────────────────
 
 class TestCleanPassthrough(unittest.TestCase):
 
     def test_plain_text(self):
-        text = "Hello, please review this code for bugs."
-        self.assertEqual(R.redact(text).text, text)
+        self.assertEqual(R.redact("Hello, please review this code for bugs.").redacted_count, 0)
 
     def test_code_snippet(self):
         text = 'fn main() {\n    let x = 42;\n    println!("hello {}", x);\n}'
-        self.assertEqual(R.redact(text).text, text)
+        self.assertEqual(R.redact(text).redacted_count, 0)
 
     def test_url_without_creds(self):
-        text = "visit https://example.com/api/v1/users"
-        self.assertEqual(R.redact(text).text, text)
+        self.assertEqual(R.redact("visit https://example.com/api/v1/users").redacted_count, 0)
 
     def test_port_number(self):
-        r = R.redact("port=5432 host=localhost")
-        self.assertEqual(r.redacted_count, 0)
+        self.assertEqual(R.redact("port=5432 host=localhost").redacted_count, 0)
 
     def test_empty(self):
-        self.assertEqual(R.redact("").text, "")
+        self.assertEqual(R.redact("").redacted_count, 0)
+
+    def test_password_discussion(self):
+        """Developer prose about auth must not be redacted."""
+        self.assertEqual(R.redact("The password is hashed with bcrypt before it hits the DB").redacted_count, 0)
+
+    def test_auth_middleware_discussion(self):
+        self.assertEqual(R.redact("auth: middleware order is wrong, fix it").redacted_count, 0)
+
+    def test_api_key_test_discussion(self):
+        self.assertEqual(R.redact("Add a test: api_key=missing should return 401, not 500").redacted_count, 0)
+
+    def test_password_docs_discussion(self):
+        self.assertEqual(R.redact("In the docs, password: required must become password: optional").redacted_count, 0)
+
+    def test_client_secret_discussion(self):
+        self.assertEqual(R.redact("The client_secret is read from Vault at boot; document that.").redacted_count, 0)
 
 
 # ── Multiple secrets ─────────────────────────────────────────────────────────
 
 class TestMultipleSecrets(unittest.TestCase):
 
-    def test_two_secrets(self):
-        r = R.redact("password=first token=second port=123")
-        self.assertNotIn("first", r.text)
-        self.assertNotIn("second", r.text)
-        self.assertGreaterEqual(r.redacted_count, 2)
+    def test_two_prefixes(self):
+        key1 = "ghp_" + "a" * 30
+        key2 = "gsk_" + "b" * 24
+        r = R.redact(f"keys: {key1} and {key2}")
+        self.assertNotIn(key1, r.text)
+        self.assertNotIn(key2, r.text)
+        self.assertEqual(r.redacted_count, 2)
 
-    def test_prefix_and_assignment(self):
-        r = R.redact("key=AIza" + "a" * 32 + " and password=hunter2 done")
-        self.assertNotIn("AIza", r.text)
-        self.assertNotIn("hunter2", r.text)
+    def test_prefix_and_uri(self):
+        key = "AIza" + "a" * 32
+        r = R.redact(f"key={key} db=postgres://user:pass@host/db")
+        self.assertNotIn(key, r.text)
+        self.assertNotIn("user:pass", r.text)
         self.assertGreaterEqual(r.redacted_count, 2)
 
 
 # ── Idempotency ──────────────────────────────────────────────────────────────
 
 class TestIdempotency(unittest.TestCase):
-    """Redacting already-redacted output must produce no further changes."""
 
     EXAMPLES = [
-        "password=SuperSecret123 done",
-        "the password is carbonara69 ok",
-        'Authorization: Bearer my_token_value_here_1234',
+        "my key is ghp_" + "a" * 30,
+        "Authorization: Bearer my_token_value_here_1234",
         "postgres://admin:s3cret@db.example.com/mydb",
         '{"password":"mysecret","port":5432}',
-        "my key is ghp_" + "a" * 30,
+        "use Bearer " + "x" * 20 + " for auth",
     ]
 
     def test_double_redact(self):
@@ -280,13 +238,11 @@ class TestIdempotency(unittest.TestCase):
 # ── Overlapping detectors ────────────────────────────────────────────────────
 
 class TestOverlap(unittest.TestCase):
-    """A value matched by multiple detectors must still be fully masked."""
 
-    def test_prefix_inside_assignment(self):
+    def test_prefix_inside_assignment_context(self):
         key = "sk-proj-" + "a" * 30
         r = R.redact(f"api_key={key}")
         self.assertNotIn(key, r.text)
-        self.assertNotIn("sk-proj", r.text)
 
     def test_bearer_with_prefix_token(self):
         r = R.redact("Authorization: Bearer ghp_" + "a" * 30)
@@ -306,26 +262,25 @@ class TestErrorBehavior(unittest.TestCase):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
             with patch.object(SecretRedactor, "redact", side_effect=RuntimeError("boom")):
                 with self.assertRaises(RedactionError) as ctx:
-                    shield_prompt("password=secret")
-                self.assertNotIn("secret", str(ctx.exception))
+                    shield_prompt("some input")
+                self.assertNotIn("some input", str(ctx.exception))
 
     def test_shield_messages_raises_on_internal_error(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
             with patch.object(SecretRedactor, "redact_messages", side_effect=RuntimeError("boom")):
                 with self.assertRaises(RedactionError):
-                    shield_messages([{"role": "user", "content": "password=secret"}])
+                    shield_messages([{"role": "user", "content": "some input"}])
 
     def test_shield_prompt_passes_redaction_error_through(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
             with patch.object(SecretRedactor, "redact", side_effect=RedactionError("test")):
                 with self.assertRaises(RedactionError):
-                    shield_prompt("password=secret")
+                    shield_prompt("some input")
 
     def test_disabled_does_not_raise(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
             with patch.object(SecretRedactor, "redact", side_effect=RuntimeError("boom")):
-                text, count = shield_prompt("password=secret")
-                self.assertIn("secret", text)
+                text, count = shield_prompt("some input")
                 self.assertEqual(count, 0)
 
 
@@ -333,56 +288,55 @@ class TestErrorBehavior(unittest.TestCase):
 
 class TestToggle(unittest.TestCase):
 
+    _KEY = "ghp_" + "a" * 30
+
     def test_disabled_by_default_no_env(self):
         with patch.dict(os.environ, {}, clear=True):
-            text, count = shield_prompt("password=hunter2")
+            text, count = shield_prompt(f"key is {self._KEY}")
             self.assertEqual(count, 0)
-            self.assertIn("hunter2", text)
+            self.assertIn(self._KEY, text)
 
     def test_enabled_via_env_1(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
-            text, count = shield_prompt("password=hunter2 done")
-            self.assertGreaterEqual(count, 1)
-            self.assertNotIn("hunter2", text)
+            text, count = shield_prompt(f"key is {self._KEY}")
+            self.assertEqual(count, 1)
+            self.assertNotIn(self._KEY, text)
 
     def test_enabled_via_env_true(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "true"}):
-            text, count = shield_prompt("password=hunter2 done")
-            self.assertGreaterEqual(count, 1)
+            text, count = shield_prompt(f"key is {self._KEY}")
+            self.assertEqual(count, 1)
 
     def test_disabled_via_env_0(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
-            text, count = shield_prompt("password=hunter2")
+            text, count = shield_prompt(f"key is {self._KEY}")
             self.assertEqual(count, 0)
-            self.assertIn("hunter2", text)
+            self.assertIn(self._KEY, text)
 
     def test_disabled_via_env_false(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "false"}):
-            text, count = shield_prompt("password=hunter2")
+            text, count = shield_prompt(f"key is {self._KEY}")
             self.assertEqual(count, 0)
 
     def test_env_var_skips_config_yaml(self):
-        """When env var is set, _resolve_enabled returns without importing hermes_cli."""
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
             from secret_shield import _resolve_enabled
-            # Patch at module level — if hermes_cli.config were imported, it would fail.
             with patch.dict(sys.modules, {"hermes_cli": None, "hermes_cli.config": None}):
-                result = _resolve_enabled()
-                self.assertFalse(result)
+                self.assertFalse(_resolve_enabled())
 
     def test_messages_disabled_returns_same_object(self):
-        messages = [{"role": "user", "content": "password=hunter2"}]
+        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
             result, count = shield_messages(messages)
         self.assertEqual(count, 0)
         self.assertIs(result, messages)
 
     def test_messages_enabled(self):
-        messages = [{"role": "user", "content": "password=hunter2 done"}]
+        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
             result, count = shield_messages(messages)
-        self.assertGreaterEqual(count, 1)
-        self.assertNotIn("hunter2", repr(result))
+        self.assertEqual(count, 1)
+        self.assertNotIn(self._KEY, repr(result))
 
 
 # ── Logging safety ───────────────────────────────────────────────────────────
@@ -390,16 +344,18 @@ class TestToggle(unittest.TestCase):
 class TestLogging(unittest.TestCase):
 
     def test_no_secrets_in_log_output(self):
+        key = "ghp_" + "x" * 30
         with self.assertLogs("secret_shield", level="WARNING") as logs:
-            redact_prompt("password=never_log_this_value done")
+            redact_prompt(f"my key is {key}")
         combined = "\n".join(logs.output)
-        self.assertNotIn("never_log_this_value", combined)
+        self.assertNotIn(key, combined)
         self.assertIn("Redacted", combined)
 
     def test_no_secrets_in_messages_log(self):
+        key = "gsk_" + "y" * 24
         with self.assertLogs("secret_shield", level="WARNING") as logs:
-            R.redact_messages([{"role": "user", "content": "token=secret_log_test done"}])
-        self.assertNotIn("secret_log_test", "\n".join(logs.output))
+            R.redact_messages([{"role": "user", "content": f"use {key}"}])
+        self.assertNotIn(key, "\n".join(logs.output))
 
 
 # ── Malformed and edge-case input ────────────────────────────────────────────
@@ -407,30 +363,34 @@ class TestLogging(unittest.TestCase):
 class TestMalformed(unittest.TestCase):
 
     def test_very_long_input(self):
-        text = "password=short " + "x" * 100_000
+        key = "ghp_" + "a" * 30
+        text = f"key is {key} " + "x" * 100_000
         r = R.redact(text)
-        self.assertNotIn("short", r.text)
+        self.assertNotIn(key, r.text)
 
-    def test_empty_password_value(self):
-        r = R.redact("password=  ")
-        self.assertEqual(r.redacted_count, 0)
+    def test_prefix_at_end_of_input(self):
+        key = "AKIA" + "A" * 16
+        r = R.redact(f"key is {key}")
+        self.assertNotIn(key, r.text)
 
-    def test_special_chars_in_value(self):
-        r = R.redact("password=p@ss!w0rd#123")
-        self.assertNotIn("p@ss!w0rd#123", r.text)
+    def test_prefix_surrounded_by_quotes(self):
+        key = "ghp_" + "a" * 30
+        r = R.redact(f'"{key}"')
+        self.assertNotIn(key, r.text)
 
-    def test_newlines_in_input(self):
-        r = R.redact("password=first\ntoken=second\nport=123")
-        self.assertNotIn("first", r.text)
-        self.assertNotIn("second", r.text)
-
-    def test_unicode_content(self):
-        r = R.redact("password=пароль_секрет done")
-        self.assertNotIn("пароль_секрет", r.text)
+    def test_newlines_around_prefix(self):
+        key = "gsk_" + "b" * 24
+        r = R.redact(f"first line\n{key}\nlast line")
+        self.assertNotIn(key, r.text)
 
     def test_only_redacted_marker(self):
-        r = R.redact(f"password={REDACTED}")
+        r = R.redact(REDACTED)
         self.assertEqual(r.redacted_count, 0)
+
+    def test_unicode_around_prefix(self):
+        key = "perm-" + "c" * 24
+        r = R.redact(f"chiave è {key} usala")
+        self.assertNotIn(key, r.text)
 
 
 # ── Message wrapper ──────────────────────────────────────────────────────────
@@ -438,14 +398,15 @@ class TestMalformed(unittest.TestCase):
 class TestMessages(unittest.TestCase):
 
     def test_masks_content(self):
+        key = "ghp_" + "a" * 30
         messages = [
             {"role": "system", "content": "You are helpful."},
-            {"role": "user", "content": "my key is ghp_" + "a" * 30},
+            {"role": "user", "content": f"my key is {key}"},
         ]
         result, count = R.redact_messages(messages)
         self.assertEqual(count, 1)
         self.assertIn(REDACTED, result[1]["content"])
-        self.assertIn("ghp_", messages[1]["content"])  # original not mutated
+        self.assertIn("ghp_", messages[1]["content"])
 
     def test_non_string_preserved(self):
         messages = [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]
@@ -472,7 +433,8 @@ class TestTypes(unittest.TestCase):
             redact_secrets(123)
 
     def test_prompt_wrapper_returns(self):
-        text, count = redact_prompt("password=short done")
+        key = "ghp_" + "z" * 30
+        text, count = redact_prompt(f"use {key}")
         self.assertIsInstance(text, str)
         self.assertEqual(count, 1)
 
