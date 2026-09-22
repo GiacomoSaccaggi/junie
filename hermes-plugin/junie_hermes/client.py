@@ -1381,8 +1381,9 @@ class JunieACPClient:
         # redo the coding work it already did, so send only the results and let
         # _ado_turn reuse the live session (falling back to the full prompt if
         # that session is gone).
-        # Secret Shield: mask credentials in prompts (opt-in, off by default).
-        prompt_text, _ = shield_prompt(prompt_text)
+        # Secret Shield: scan prompts for credentials (opt-in, off by default).
+        # Mode determines behavior: warn (log only), mask (replace), block (raise).
+        prompt_text, shield_findings = shield_prompt(prompt_text)
 
         _trailing = _trailing_tool_results(messages)
         continuation_prompt = (
@@ -1391,7 +1392,8 @@ class JunieACPClient:
             else None
         )
         if continuation_prompt:
-            continuation_prompt, _ = shield_prompt(continuation_prompt)
+            continuation_prompt, cont_findings = shield_prompt(continuation_prompt)
+            shield_findings += cont_findings
 
         # Normalise timeout: run_agent.py may pass an httpx.Timeout object
         # (used natively by the OpenAI SDK) rather than a plain float.

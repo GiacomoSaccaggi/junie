@@ -1,33 +1,30 @@
-"""Secret Shield — credential masking for the Junie ACP input path.
+"""Secret Shield — credential detection for the Junie ACP input path.
 
-Opt-in via env var or config.yaml (off by default)::
+Opt-in via env var or config.yaml (off by default). Three modes::
 
-    HERMES_JUNIE_ACP_SECRET_SHIELD=1 junie
+    HERMES_JUNIE_ACP_SECRET_SHIELD=warn   # detect, log warning, send original
+    HERMES_JUNIE_ACP_SECRET_SHIELD=mask   # detect, mask with [REDACTED], send masked
+    HERMES_JUNIE_ACP_SECRET_SHIELD=block  # detect, block delivery entirely
+
+    # 1/true/yes/on are aliases for "mask" (backward compatible)
 
     # or in config.yaml:
     junie_acp:
-      secret_shield: true
+      secret_shield: warn   # or mask, block
 
-Masks known secret patterns (API keys, passwords, tokens, bearer headers,
-connection strings, JWT-shaped tokens) before they reach the Junie subprocess.
+Toggle precedence: env var > config.yaml > default (off).
+When the env var is set (to any value including "0"), config.yaml is not read.
+When off, ``shield_prompt`` / ``shield_messages`` return immediately with no
+scanning, no config parsing, and no regex execution.
 
 The existing ``agent.redact.redact_sensitive_text`` handles file-read output;
 this module protects the *input* path.
 
-Toggle precedence: env var > config.yaml > default (off).
-When the env var is set (to any value including "0"), config.yaml is not read.
-When disabled, ``shield_prompt`` / ``shield_messages`` return immediately
-with no scanning, no config parsing, and no regex execution.
-
-When enabled, if the redactor raises an unexpected exception, the shield
-functions re-raise ``RedactionError`` — callers must not fall back to the
-unredacted input.
-
-Scope of this first version: provider prefix patterns, key=value assignments,
-HTTP headers, connection string URIs, JWT-shaped tokens (heuristic format
-recognition via base64 header, not signature verification), and JSON sensitive
-fields. Structured-format scanning (YAML blocks, XML elements, PEM keys,
-entropy detection) is deferred to keep this change reviewable.
+Scope: provider prefix patterns, JSON sensitive fields, HTTP headers, auth
+schemes, connection string URIs, JWT-shaped tokens (heuristic format recognition
+via base64 header, not signature verification). Structured-format scanning
+(YAML blocks, XML elements, PEM keys, entropy detection) is deferred to keep
+this change reviewable.
 """
 from __future__ import annotations
 
@@ -47,7 +44,7 @@ REDACTED = "[REDACTED]"
 # ── Public types ─────────────────────────────────────────────────────────────
 
 class RedactionError(ValueError):
-    """Redaction failed; callers must block delivery, not fall back to raw input."""
+    """Redaction failed or blocked; callers must not send the original input."""
 
 
 @dataclass
@@ -58,32 +55,42 @@ class RedactResult:
 
 # ── Toggle ───────────────────────────────────────────────────────────────────
 
-_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
+_MASK_ALIASES = frozenset({"1", "true", "yes", "on", "mask"})
+_VALID_MODES = frozenset({"off", "warn", "mask", "block"})
 
 
-def _resolve_enabled() -> bool:
-    """Precedence: env var > config.yaml > default (off).
+def _resolve_mode() -> str:
+    """Return the active mode: "off", "warn", "mask", or "block".
 
-    When the env var is set to *any* value (including "0" / "false"), config.yaml
-    is never consulted — this avoids importing ``hermes_cli`` on every call when
-    the feature is explicitly disabled.
+    Precedence: env var > config.yaml > default ("off").
+    When the env var is set to any value (including "0"), config.yaml is never
+    consulted.
     """
     raw = os.getenv("HERMES_JUNIE_ACP_SECRET_SHIELD")
     if raw is not None:
-        return raw.strip().lower() in _ENABLED_VALUES
+        val = raw.strip().lower()
+        if val in _VALID_MODES:
+            return val
+        if val in _MASK_ALIASES:
+            return "mask"
+        return "off"
     try:
         from hermes_cli.config import load_config_readonly
         block = load_config_readonly().get("junie_acp")
         if isinstance(block, dict):
             val = str(block.get("secret_shield", "") or "").strip().lower()
-            return val in _ENABLED_VALUES
+            if val in _VALID_MODES:
+                return val
+            if val in _MASK_ALIASES:
+                return "mask"
     except Exception:
         pass
-    return False
+    return "off"
 
 
 def is_enabled() -> bool:
-    return _resolve_enabled()
+    """Return True if Secret Shield is active in any mode (warn, mask, or block)."""
+    return _resolve_mode() != "off"
 
 
 # ── Engine ───────────────────────────────────────────────────────────────────
@@ -220,6 +227,12 @@ class SecretRedactor:
 
         return RedactResult(text=result, redacted_count=count)
 
+    def scan(self, text: str) -> int:
+        """Detect credentials without masking. Returns the number of findings."""
+        if not isinstance(text, str):
+            raise TypeError("text must be str")
+        return self.redact(text).redacted_count
+
     def redact_messages(self, messages: list[dict[str, object]]) -> tuple[list[dict[str, object]], int]:
         """Redact secrets in OpenAI-format message dicts.
 
@@ -244,6 +257,19 @@ class SecretRedactor:
             logger.warning("Redacted %d sensitive spans/fields in outbound messages", total)
         return out, total
 
+    def scan_messages(self, messages: list[dict[str, object]]) -> int:
+        """Detect credentials in messages without masking. Returns finding count."""
+        if not isinstance(messages, list):
+            raise TypeError("messages must be a list of dictionaries")
+        total = 0
+        for msg in messages:
+            if not isinstance(msg, dict):
+                raise TypeError("messages must be a list of dictionaries")
+            content = msg.get("content")
+            if isinstance(content, str):
+                total += self.redact(content).redacted_count
+        return total
+
 
 # ── Module-level convenience API ─────────────────────────────────────────────
 
@@ -267,16 +293,44 @@ def redact_prompt(prompt_text: str) -> tuple[str, int]:
 
 # ── Toggle-aware public API ──────────────────────────────────────────────────
 #
-# These are the entry points used by client.py. When disabled, they return
-# immediately. When enabled, if the redactor raises an unexpected exception,
-# they re-raise RedactionError so callers block delivery rather than sending
-# unredacted input.
+# These are the entry points used by client.py.
+#
+# Modes:
+#   off   — no scanning, immediate passthrough
+#   warn  — detect, log a warning with finding count, send original unchanged
+#   mask  — detect, replace findings with [REDACTED], send masked version
+#   block — detect, raise RedactionError if findings > 0, never send
+#
+# In all active modes, if the redactor itself raises an unexpected exception,
+# RedactionError is raised (fail-closed).
 
 def shield_prompt(prompt_text: str) -> tuple[str, int]:
-    """Mask secrets in a prompt. Returns unchanged if Secret Shield is disabled."""
-    if not _resolve_enabled():
+    """Apply Secret Shield to a prompt string. Returns (text, finding_count).
+
+    In "warn" mode the original text is returned (findings are only logged).
+    In "mask" mode the masked text is returned.
+    In "block" mode RedactionError is raised if any findings.
+    """
+    mode = _resolve_mode()
+    if mode == "off":
         return prompt_text, 0
     try:
+        if mode == "warn":
+            count = _DEFAULT.scan(prompt_text)
+            if count:
+                logger.warning(
+                    "\U0001f6e1 Secret Shield [warn]: detected %d potential credential(s) in prompt, sending original",
+                    count,
+                )
+            return prompt_text, count
+        if mode == "block":
+            count = _DEFAULT.scan(prompt_text)
+            if count:
+                raise RedactionError(
+                    f"Secret Shield [block]: detected {count} potential credential(s), delivery blocked"
+                )
+            return prompt_text, 0
+        # mode == "mask"
         return redact_prompt(prompt_text)
     except RedactionError:
         raise
@@ -289,10 +343,32 @@ def shield_prompt(prompt_text: str) -> tuple[str, int]:
 def shield_messages(
     messages: list[dict[str, object]],
 ) -> tuple[list[dict[str, object]], int]:
-    """Mask secrets in messages. Returns unchanged if Secret Shield is disabled."""
-    if not _resolve_enabled():
+    """Apply Secret Shield to a message list. Returns (messages, finding_count).
+
+    In "warn" mode the original list is returned (findings are only logged).
+    In "mask" mode a new list with masked content is returned.
+    In "block" mode RedactionError is raised if any findings.
+    """
+    mode = _resolve_mode()
+    if mode == "off":
         return messages, 0
     try:
+        if mode == "warn":
+            count = _DEFAULT.scan_messages(messages)
+            if count:
+                logger.warning(
+                    "\U0001f6e1 Secret Shield [warn]: detected %d potential credential(s) in messages, sending original",
+                    count,
+                )
+            return messages, count
+        if mode == "block":
+            count = _DEFAULT.scan_messages(messages)
+            if count:
+                raise RedactionError(
+                    f"Secret Shield [block]: detected {count} potential credential(s), delivery blocked"
+                )
+            return messages, 0
+        # mode == "mask"
         return redact_messages(messages)
     except RedactionError:
         raise

@@ -19,7 +19,7 @@ if str(_plugin_dir) not in sys.path:
 from secret_shield import (
     REDACTED, RedactResult, RedactionError, SecretRedactor,
     redact_secrets, redact_messages, redact_prompt,
-    shield_prompt, shield_messages,
+    shield_prompt, shield_messages, _resolve_mode,
 )
 
 R = SecretRedactor()
@@ -258,85 +258,196 @@ class TestOverlap(unittest.TestCase):
 
 class TestErrorBehavior(unittest.TestCase):
 
-    def test_shield_prompt_raises_on_internal_error(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
+    def test_mask_raises_on_internal_error(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "mask"}):
             with patch.object(SecretRedactor, "redact", side_effect=RuntimeError("boom")):
-                with self.assertRaises(RedactionError) as ctx:
-                    shield_prompt("some input")
-                self.assertNotIn("some input", str(ctx.exception))
-
-    def test_shield_messages_raises_on_internal_error(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
-            with patch.object(SecretRedactor, "redact_messages", side_effect=RuntimeError("boom")):
-                with self.assertRaises(RedactionError):
-                    shield_messages([{"role": "user", "content": "some input"}])
-
-    def test_shield_prompt_passes_redaction_error_through(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
-            with patch.object(SecretRedactor, "redact", side_effect=RedactionError("test")):
                 with self.assertRaises(RedactionError):
                     shield_prompt("some input")
 
-    def test_disabled_does_not_raise(self):
+    def test_warn_raises_on_internal_error(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
+            with patch.object(SecretRedactor, "scan", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RedactionError):
+                    shield_prompt("some input")
+
+    def test_block_raises_on_internal_error(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "block"}):
+            with patch.object(SecretRedactor, "scan", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RedactionError):
+                    shield_prompt("some input")
+
+    def test_off_does_not_raise(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
             with patch.object(SecretRedactor, "redact", side_effect=RuntimeError("boom")):
                 text, count = shield_prompt("some input")
                 self.assertEqual(count, 0)
 
+    def test_error_message_has_no_secrets(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "mask"}):
+            with patch.object(SecretRedactor, "redact", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RedactionError) as ctx:
+                    shield_prompt("some input")
+                self.assertNotIn("some input", str(ctx.exception))
 
-# ── Toggle behavior ──────────────────────────────────────────────────────────
 
-class TestToggle(unittest.TestCase):
+# ── Mode resolution ──────────────────────────────────────────────────────────
+
+class TestModeResolution(unittest.TestCase):
+
+    def test_default_is_off(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(_resolve_mode(), "off")
+
+    def test_env_0_is_off(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
+            self.assertEqual(_resolve_mode(), "off")
+
+    def test_env_false_is_off(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "false"}):
+            self.assertEqual(_resolve_mode(), "off")
+
+    def test_env_off_is_off(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "off"}):
+            self.assertEqual(_resolve_mode(), "off")
+
+    def test_env_1_is_mask(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
+            self.assertEqual(_resolve_mode(), "mask")
+
+    def test_env_true_is_mask(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "true"}):
+            self.assertEqual(_resolve_mode(), "mask")
+
+    def test_env_mask_is_mask(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "mask"}):
+            self.assertEqual(_resolve_mode(), "mask")
+
+    def test_env_warn_is_warn(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
+            self.assertEqual(_resolve_mode(), "warn")
+
+    def test_env_block_is_block(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "block"}):
+            self.assertEqual(_resolve_mode(), "block")
+
+    def test_env_skips_config_yaml(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
+            with patch.dict(sys.modules, {"hermes_cli": None, "hermes_cli.config": None}):
+                self.assertEqual(_resolve_mode(), "off")
+
+
+# ── Warn mode ────────────────────────────────────────────────────────────────
+
+class TestWarnMode(unittest.TestCase):
 
     _KEY = "ghp_" + "a" * 30
 
-    def test_disabled_by_default_no_env(self):
-        with patch.dict(os.environ, {}, clear=True):
+    def test_warn_returns_original_text(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
             text, count = shield_prompt(f"key is {self._KEY}")
-            self.assertEqual(count, 0)
-            self.assertIn(self._KEY, text)
+        self.assertEqual(count, 1)
+        self.assertIn(self._KEY, text)
 
-    def test_enabled_via_env_1(self):
+    def test_warn_logs_warning(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
+            with self.assertLogs("secret_shield", level="WARNING") as logs:
+                shield_prompt(f"key is {self._KEY}")
+        combined = "\n".join(logs.output)
+        self.assertIn("warn", combined)
+        self.assertIn("1", combined)
+        self.assertNotIn(self._KEY, combined)
+
+    def test_warn_messages_returns_original(self):
+        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
+            result, count = shield_messages(messages)
+        self.assertEqual(count, 1)
+        self.assertIs(result, messages)
+
+    def test_warn_clean_input_no_log(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "warn"}):
+            text, count = shield_prompt("just normal text")
+        self.assertEqual(count, 0)
+        self.assertEqual(text, "just normal text")
+
+
+# ── Mask mode ────────────────────────────────────────────────────────────────
+
+class TestMaskMode(unittest.TestCase):
+
+    _KEY = "ghp_" + "a" * 30
+
+    def test_mask_replaces_secret(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "mask"}):
+            text, count = shield_prompt(f"key is {self._KEY}")
+        self.assertEqual(count, 1)
+        self.assertNotIn(self._KEY, text)
+        self.assertIn(REDACTED, text)
+
+    def test_mask_messages(self):
+        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "mask"}):
+            result, count = shield_messages(messages)
+        self.assertEqual(count, 1)
+        self.assertNotIn(self._KEY, repr(result))
+
+    def test_1_is_alias_for_mask(self):
         with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
             text, count = shield_prompt(f"key is {self._KEY}")
-            self.assertEqual(count, 1)
-            self.assertNotIn(self._KEY, text)
+        self.assertNotIn(self._KEY, text)
+        self.assertEqual(count, 1)
 
-    def test_enabled_via_env_true(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "true"}):
-            text, count = shield_prompt(f"key is {self._KEY}")
-            self.assertEqual(count, 1)
 
-    def test_disabled_via_env_0(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
-            text, count = shield_prompt(f"key is {self._KEY}")
-            self.assertEqual(count, 0)
-            self.assertIn(self._KEY, text)
+# ── Block mode ───────────────────────────────────────────────────────────────
 
-    def test_disabled_via_env_false(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "false"}):
-            text, count = shield_prompt(f"key is {self._KEY}")
-            self.assertEqual(count, 0)
+class TestBlockMode(unittest.TestCase):
 
-    def test_env_var_skips_config_yaml(self):
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
-            from secret_shield import _resolve_enabled
-            with patch.dict(sys.modules, {"hermes_cli": None, "hermes_cli.config": None}):
-                self.assertFalse(_resolve_enabled())
+    _KEY = "ghp_" + "a" * 30
 
-    def test_messages_disabled_returns_same_object(self):
+    def test_block_raises_on_finding(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "block"}):
+            with self.assertRaises(RedactionError) as ctx:
+                shield_prompt(f"key is {self._KEY}")
+            self.assertIn("block", str(ctx.exception))
+            self.assertNotIn(self._KEY, str(ctx.exception))
+
+    def test_block_messages_raises_on_finding(self):
         messages = [{"role": "user", "content": f"key is {self._KEY}"}]
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "0"}):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "block"}):
+            with self.assertRaises(RedactionError):
+                shield_messages(messages)
+
+    def test_block_clean_input_passes(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "block"}):
+            text, count = shield_prompt("just normal text")
+        self.assertEqual(count, 0)
+        self.assertEqual(text, "just normal text")
+
+
+# ── Off mode ─────────────────────────────────────────────────────────────────
+
+class TestOffMode(unittest.TestCase):
+
+    _KEY = "ghp_" + "a" * 30
+
+    def test_off_returns_original(self):
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "off"}):
+            text, count = shield_prompt(f"key is {self._KEY}")
+        self.assertEqual(count, 0)
+        self.assertIn(self._KEY, text)
+
+    def test_off_messages_returns_same_object(self):
+        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
+        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "off"}):
             result, count = shield_messages(messages)
         self.assertEqual(count, 0)
         self.assertIs(result, messages)
 
-    def test_messages_enabled(self):
-        messages = [{"role": "user", "content": f"key is {self._KEY}"}]
-        with patch.dict(os.environ, {"HERMES_JUNIE_ACP_SECRET_SHIELD": "1"}):
-            result, count = shield_messages(messages)
-        self.assertEqual(count, 1)
-        self.assertNotIn(self._KEY, repr(result))
+    def test_default_off(self):
+        with patch.dict(os.environ, {}, clear=True):
+            text, count = shield_prompt(f"key is {self._KEY}")
+        self.assertEqual(count, 0)
+        self.assertIn(self._KEY, text)
 
 
 # ── Logging safety ───────────────────────────────────────────────────────────
